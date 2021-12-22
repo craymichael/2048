@@ -1,10 +1,23 @@
+function choose_index(choices) {
+    return Math.floor(Math.random() * choices.length);
+}
+
 function choose(choices) {
-    const index = Math.floor(Math.random() * choices.length);
+    const index = choose_index(choices);
     return choices[index];
 }
 
-function choose_index(choices) {
-    return Math.floor(Math.random() * choices.length);
+function copy_matrix(matrix) {
+    return matrix.map(function (arr) {
+        return arr.slice();
+    });
+}
+
+function equal_matrices(matrix_a, matrix_b) {
+    return matrix_a.every((row, i) => {
+        const row_orig = matrix_b[i];
+        return row.every((val, j) => val === row_orig[j]);
+    });
 }
 
 // Direction enum
@@ -21,19 +34,17 @@ class Game {
         this.n_cols = n_cols;
         this.board = new Array(this.n_rows)
         this.score = 0;
-        // console.log('yote', this.board);
-        for (let i = 0; i < this.n_rows; ++i) {
-            // this.board[i] = [];
-            // console.log('A', this.board[i]);
+        this.moves = 0;
+        for (let i = 0; i < this.n_rows; ++i)
             this.board[i] = new Array(this.n_cols);
-            // for (let j = 0; j < this.n_cols; ++j) {
-            //     console.log('J', i, j, this.board);
-            //     this.board[i][j] = null;
-            // }
-            // console.log('B', this.board[i]);
-        }
-        // console.log('yeet', this.board);
-        console.log('yeet', JSON.parse(JSON.stringify(this.board)));
+    }
+
+    copy() {
+        const copy = new Game(this.n_rows, this.n_cols);
+        copy.board = copy_matrix(this.board);
+        copy.score = this.score;
+        copy.moves = this.moves;
+        return copy;
     }
 
     initialize() {
@@ -41,8 +52,6 @@ class Game {
         const first_index = choose_index(empty_indices);
         const first = empty_indices.splice(first_index, 1)[0];
         const second = choose(empty_indices);
-        console.log('first ', first);
-        console.log('second ', second);
         this.spawn(first);
         this.spawn(second);
     }
@@ -51,13 +60,10 @@ class Game {
         if (value === null)
             // spawn a new random element (1 out of 10 is 4, otherwise 2)
             value = Math.random() < .9 ? 2 : 4;
-        console.log('x', indices);
         if (indices === null) {
             const empty_indices = this.find_empty_indices();
-            let indices = choose(empty_indices);
-            console.log('y', indices, empty_indices);
+            indices = choose(empty_indices);
         }
-        console.log('z', indices);
         this.board[indices[0]][indices[1]] = value;
     }
 
@@ -71,6 +77,7 @@ class Game {
     }
 
     swipe(direction) {
+        const board_orig = copy_matrix(this.board);
         switch (direction) {
             case Direction.Up:
             case Direction.Down:
@@ -106,17 +113,22 @@ class Game {
                 }
                 break;
             default:
-                throw `${direction} is not a valid Direction enum!'`
+                throw `${direction} is not a valid Direction enum!`
         }
+        if (equal_matrices(this.board, board_orig))
+            return false;
+        // otherwise, board has changed
+        this.moves += 1;
+        return true;
     }
 
     process_line(line) {
         // line must be ordered such that the first element is the last along the swiped direction
         // e.g. Direction.Right for a row would be 3,2,1,0 and Direction.Left would be 0,1,2,3
-        const line_out = [];
+        const line_out = new Array(line.length);
         let last_val = null;
         let index = 0;
-        for (const val in line) {
+        for (const val of line) {
             if (val === undefined)
                 continue
             if (last_val === val) {
@@ -130,90 +142,110 @@ class Game {
         }
         return line_out;
     }
+
+    print() {
+        console.log('Score =', this.score);
+        console.log('Moves =', this.moves);
+        for (const row of this.board) {
+            const row_str = [];
+            for (const val of row)
+                if (val === undefined)
+                    row_str.push('   _');
+                else
+                    row_str.push(val.toString().padStart(4, ' '));
+            console.log(row_str.join(' '));
+        }
+        console.log();
+    }
 }
 
-// async function run() {
-//     const n_rows = 4;
-//     const n_cols = 4;
-//
-//     await console.log('P');
-//     const game = await new Game(n_rows, n_cols);
-//     await console.log('board', game.board);
-//     await console.log('score', game.score);
-//
-//     await console.log('A');
-//     await game.initialize();
-//     await console.log('board', game.board);
-//     await console.log('score', game.score);
-//
-//     await console.log('B');
-//     await game.swipe(Direction.Down);
-//     await game.spawn();
-//     await console.log('board', game.board);
-//     await console.log('score', game.score);
-//
-//     await console.log('C');
-//     await game.swipe(Direction.Up);
-//     await game.spawn();
-//     await console.log('board', game.board);
-//     await console.log('score', game.score);
-//
-//     await console.log('D');
-//     await game.swipe(Direction.Right);
-//     await game.spawn();
-//     await console.log('board', game.board);
-//     await console.log('score', game.score);
-//
-//     await console.log('E');
-//     await game.swipe(Direction.Left);
-//     await game.spawn();
-//     await console.log('board', game.board);
-//     await console.log('score', game.score);
-// }
-//
-// (async () => {
-//     await run().then(() => {
-//         console.log('Done!');
-//     });
-// })();
+class Solver {
+    constructor(game, depth = 5) {
+        this.game = game;
+        this.depth = depth;
+    }
+
+    solve() {
+
+    }
+
+    step(game = null, depth = null, moves=null) {
+        if (game === null)
+            game = this.game;
+        if (depth === null)
+            depth = this.depth;
+        if (moves === null)
+            moves = [];
+        if (depth === 0)
+            return [[moves, game.score]];
+        const results = [];
+        for (const direction of [Direction.Up, Direction.Down, Direction.Left, Direction.Right]) {
+            const game_copy = game.copy();
+            const moves_copy = moves.slice();
+            moves_copy.push(direction);
+            const changed = game_copy.swipe(direction);
+            if (!changed) {
+                // score of -1 when invalid move encountered
+                results.push([moves_copy, -1]);
+                continue;
+            }
+            const empty_indices = game_copy.find_empty_indices();
+            scores[direction]
+        }
+        return results;
+    }
+}
 
 function run() {
     const n_rows = 4;
     const n_cols = 4;
 
-    console.log('P');
     const game = new Game(n_rows, n_cols);
-    console.log('board', game.board);
-    console.log('score', game.score);
+    game.print();
 
-    console.log('A');
     game.initialize();
-    console.log('board', game.board);
-    console.log('score', game.score);
+    game.print();
 
-    console.log('B');
-    game.swipe(Direction.Down);
-    // game.spawn();
-    console.log('board', game.board);
-    console.log('score', game.score);
+    // document.addEventListener('keydown', function(event) {
+    //     if(event.keyCode === 37) {
+    //         alert('Left was pressed');
+    //     }
+    //     else if(event.key === 'right') {
+    //         alert('Right was pressed');
+    //     } else {
+    //         console.log(event.key);
+    //     }
+    // });
 
-    // console.log('C');
-    // game.swipe(Direction.Up);
-    // game.spawn();
-    // console.log('board', game.board);
-    // console.log('score', game.score);
-    //
-    // console.log('D');
-    // game.swipe(Direction.Right);
-    // game.spawn();
-    // console.log('board', game.board);
-    // console.log('score', game.score);
-    //
-    // console.log('E');
-    // game.swipe(Direction.Left);
-    // game.spawn();
-    // console.log('board', game.board);
-    // console.log('score', game.score);
+    const stdin = process.stdin;
+    // without this, we would only get streams once enter is pressed
+    stdin.setRawMode(true);
+    // resume stdin in the parent process (node app won't quit all by itself
+    // unless an error or process.exit() happens)
+    stdin.resume();
+    stdin.setEncoding('utf8');
+    stdin.on('data', function (key) {
+        const board_orig = copy_matrix(game.board);
+        let direction;
+        if (key === '\u0003')
+            process.exit();
+        else if (key === '\u001b[A')
+            direction = Direction.Up;
+        else if (key === '\u001b[B')
+            direction = Direction.Down;
+        else if (key === '\u001b[C')
+            direction = Direction.Right;
+        else if (key === '\u001b[D')
+            direction = Direction.Left;
+        else
+            return;  // invalid input
+        const changed = game.swipe(direction);
+        if (changed) {
+            game.print();
+            game.spawn();
+            game.print();
+        }
+    });
 }
 
 run();
