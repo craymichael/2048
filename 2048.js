@@ -20,6 +20,10 @@ function equal_matrices(matrix_a, matrix_b) {
     });
 }
 
+function mean(values) {
+    return values.reduce((a, b) => (a + b)) / values.length;
+}
+
 // Direction enum
 const Direction = {
     Up: 1,
@@ -54,6 +58,7 @@ class Game {
         const second = choose(empty_indices);
         this.spawn(first);
         this.spawn(second);
+        return this;
     }
 
     spawn(indices = null, value = null) {
@@ -65,6 +70,7 @@ class Game {
             indices = choose(empty_indices);
         }
         this.board[indices[0]][indices[1]] = value;
+        return this;
     }
 
     find_empty_indices() {
@@ -160,39 +166,74 @@ class Game {
 }
 
 class Solver {
-    constructor(game, depth = 5) {
+    constructor(game, depth = 3) {
         this.game = game;
         this.depth = depth;
     }
 
     solve() {
-
+        this.game.print();
+        while (true) {
+            this.start_score = this.game.score;
+            const result = this.step();
+            console.log(result[1]);
+            if (result[1] === -1) {
+                console.log('Game over.');
+                break;
+            }
+            this.game.swipe(result[0]);
+            this.game.print();
+            this.game.spawn();
+            this.game.print();
+        }
     }
 
-    step(game = null, depth = null, moves=null) {
+    step(game = null, depth = null) {
+        // determines the best direction to swipe
         if (game === null)
             game = this.game;
         if (depth === null)
             depth = this.depth;
-        if (moves === null)
-            moves = [];
         if (depth === 0)
-            return [[moves, game.score]];
-        const results = [];
+            return [null, game.score - this.start_score];
+        let best_direction = null;
+        let best_score = null;
+        let score;
         for (const direction of [Direction.Up, Direction.Down, Direction.Left, Direction.Right]) {
             const game_copy = game.copy();
-            const moves_copy = moves.slice();
-            moves_copy.push(direction);
             const changed = game_copy.swipe(direction);
-            if (!changed) {
+            if (!changed)
                 // score of -1 when invalid move encountered
-                results.push([moves_copy, -1]);
-                continue;
+                score = -1;
+            else {
+                const empty_indices = game_copy.find_empty_indices();
+                if (empty_indices.length === 0)
+                    score = this.step(game_copy, depth - 1)[1];
+                else {
+                    const scores_swipe_2 = [];  // p = .8
+                    for (const empty_index of empty_indices) {
+                        const game_copy_spawn = game_copy.copy().spawn(empty_index, 2);
+                        scores_swipe_2.push(this.step(game_copy_spawn, depth - 1)[1]);
+                        break; // TODO parameterize
+                    }
+                    const scores_swipe_4 = []; // p = .2
+                    for (const empty_index of empty_indices) {
+                        const game_copy_spawn = game_copy.copy().spawn(empty_index, 4);
+                        scores_swipe_4.push(this.step(game_copy_spawn, depth - 1)[1]);
+                        break; // TODO parameterize
+                    }
+                    // expected score for swipe in direction is average or median TODO
+                    // TODO also consider using 2D monotonicity as a metric
+                    score = 0.8 * mean(scores_swipe_2) + 0.2 * mean(scores_swipe_4);
+                }
             }
-            const empty_indices = game_copy.find_empty_indices();
-            scores[direction]
+            if (best_direction === null || score > best_score) {
+                best_direction = direction;
+                best_score = score;
+            }
         }
-        return results;
+        // direction that gives the best expected score at the end of `depth` moves
+        return [best_direction, best_score];
     }
 }
 
@@ -225,7 +266,6 @@ function run() {
     stdin.resume();
     stdin.setEncoding('utf8');
     stdin.on('data', function (key) {
-        const board_orig = copy_matrix(game.board);
         let direction;
         if (key === '\u0003')
             process.exit();
@@ -248,4 +288,15 @@ function run() {
     });
 }
 
-run();
+function run_solver() {
+    const n_rows = 4;
+    const n_cols = 4;
+
+    const game = new Game(n_rows, n_cols);
+    game.initialize();
+    const solver = new Solver(game, 6);
+    solver.solve();
+}
+
+// run();
+run_solver();
