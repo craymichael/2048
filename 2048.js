@@ -24,6 +24,47 @@ function mean(values) {
     return values.reduce((a, b) => (a + b)) / values.length;
 }
 
+function median(values) {
+    values = values.slice();
+    values.sort();
+    const mid = values.length >> 1;
+    if ((values.length % 2) === 0)
+        return (values[mid] + values[mid + 1]) / 2;
+    else
+        return values[mid];
+}
+
+function row_monotonicity(row) {
+    if (row.length < 2)
+        return 1.0;
+    const non_empty = row.filter((value) => (value !== undefined));
+    if (non_empty.length < 2)
+        return 1.0;
+
+    let score = 0;
+    let last = 1; // used to settle ties
+    for (let i = 1; i < non_empty.length; ++i) {
+        last = (non_empty[i - 1] < non_empty[i]) ? 1
+            : (non_empty[i - 1] > non_empty[i]) ? -1 : last;
+        score += last;
+    }
+    score /= non_empty.length;
+    return Math.abs(score);
+}
+
+function matrix_monotonicity(matrix) {
+    const scores = [];
+    for (const row of matrix)
+        scores.push(row_monotonicity(row));
+    for (let j = 0; j < matrix.length; ++j) {
+        const row = [];
+        for (let i = 0; i < matrix[0].length; ++i)
+            row[i] = matrix[i][j];
+        scores.push(row_monotonicity(row));
+    }
+    return mean(scores);
+}
+
 // Direction enum
 const Direction = {
     Up: 1,
@@ -195,17 +236,18 @@ class Solver {
         if (depth === null)
             depth = this.depth;
         if (depth === 0)
-            return [null, game.score - this.start_score];
+            // return [null, game.score - this.start_score];
+            return [null, matrix_monotonicity(game.board)];
         let best_direction = null;
         let best_score = null;
         let score;
         for (const direction of [Direction.Up, Direction.Down, Direction.Left, Direction.Right]) {
             const game_copy = game.copy();
             const changed = game_copy.swipe(direction);
-            if (!changed)
+            if (!changed) {
                 // score of -1 when invalid move encountered
                 score = -1;
-            else {
+            } else {
                 const empty_indices = game_copy.find_empty_indices();
                 if (empty_indices.length === 0)
                     score = this.step(game_copy, depth - 1)[1];
@@ -224,7 +266,8 @@ class Solver {
                     }
                     // expected score for swipe in direction is average or median TODO
                     // TODO also consider using 2D monotonicity as a metric
-                    score = 0.8 * mean(scores_swipe_2) + 0.2 * mean(scores_swipe_4);
+                    // score = 0.8 * mean(scores_swipe_2) + 0.2 * mean(scores_swipe_4);
+                    score = 0.8 * median(scores_swipe_2) + 0.2 * median(scores_swipe_4);
                 }
             }
             if (best_direction === null || score > best_score) {
